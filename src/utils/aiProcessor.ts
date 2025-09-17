@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { VoiceCommand } from '../types/index'
 
-const API_KEY = 'AIzaSyDi04sCzDKBMyEUAYzlJ3lQwIQ3fRBkWyo' // Replace with your actual API key
+const API_KEY = 'API_KEY' // Replace with your actual API key
 const genAI = new GoogleGenerativeAI(API_KEY)
 
 export async function processVoiceCommand(transcript: string): Promise<VoiceCommand> {
