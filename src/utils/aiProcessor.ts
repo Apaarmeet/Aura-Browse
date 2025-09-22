@@ -1,13 +1,15 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { VoiceCommand } from '../types/index'
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { VoiceCommand } from "../types/index";
 
-const API_KEY = 'AIzaSyDi04sCzDKBMyEUAYzlJ3lQwIQ3fRBkWyo' // Replace with your actual API key
-const genAI = new GoogleGenerativeAI(API_KEY)
+const API_KEY = "AIzaSyDi04sCzDKBMyEUAYzlJ3lQwIQ3fRBkWyo"; // Replace with your actual API key
+const genAI = new GoogleGenerativeAI(API_KEY);
 
-export async function processVoiceCommand(transcript: string): Promise<VoiceCommand> {
+export async function processVoiceCommand(
+  transcript: string
+): Promise<VoiceCommand> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
-    
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
     const prompt = `
     You are a browser automation assistant. Analyze the user's voice command and return a JSON response with the action to take and parameters.
 
@@ -18,6 +20,7 @@ export async function processVoiceCommand(transcript: string): Promise<VoiceComm
     - scroll: Scroll the page
     - type: Type text into an input field
     - play_youtube: Open YouTube and search for content
+    - google_search: Search on Google (use this when user explicitly mentions Google)
 
     User command: "${transcript}"
 
@@ -37,32 +40,34 @@ export async function processVoiceCommand(transcript: string): Promise<VoiceComm
     Examples:
     - "open youtube and play karan aujla" → {"action": "play_youtube", "parameters": {"query": "karan aujla"}, "response": "Opening YouTube and searching for Karan Aujla"}
     - "scroll down" → {"action": "scroll", "parameters": {"direction": "down"}, "response": "Scrolling down the page"}
+    - "search about trump on google" → {"action": "google_search", "parameters": {"query": "trump"}, "response": "Searching Google for Trump"}
+    - "google who is elon musk" → {"action": "google_search", "parameters": {"query": "who is elon musk"}, "response": "Searching Google for information about Elon Musk"}
 
     IMPORTANT:
     - Return ONLY raw JSON (no markdown, no code block, no extra text).
     - If user says "open youtube", treat it as {"action":"navigate","parameters":{"url":"https://youtube.com"}}
     
-    `
+    `;
 
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const text = response.text()
-    console.log("AI raw response", text)
-    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    console.log("AI raw response", text);
+
     // Parse JSON response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as VoiceCommand
-      return parsed
+      const parsed = JSON.parse(jsonMatch[0]) as VoiceCommand;
+      return parsed;
     }
-    
-    throw new Error('Invalid response format')
+
+    throw new Error("Invalid response format");
   } catch (error) {
-    console.error('AI processing error:', error)
+    console.error("AI processing error:", error);
     return {
-      action: 'none',
+      action: "none",
       parameters: {},
-      response: 'Sorry, I could not understand your command.'
-    }
+      response: "Sorry, I could not understand your command.",
+    };
   }
 }

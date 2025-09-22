@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "name": "Voice Assistant",
+    "name": "Aura Browse - Voice Assistant",
     "version": "1.0.0",
     "description": "AI-powered voice assistant for browser automation",
     "permissions": [
@@ -11,20 +11,24 @@
       "webNavigation"
     ],
     "host_permissions": [
-      "http://*/*",
-      "https://*/*"
+      "<all_urls>"
     ],
     "action": {
       "default_popup": "index.html",
-      "default_title": "Voice Assistant"
+      "default_title": "Aura Browse"
     },
     "background": {
-      "service_worker": "src/background/background.ts"
+      "service_worker": "src/background/background.ts",
+      "type": "module"
     },
     "content_scripts": [
       {
-        "matches": ["<all_urls>"],
-        "js": ["src/content/content-script.ts"]
+        "matches": [
+          "<all_urls>"
+        ],
+        "js": ["src/content/content-script.ts"],
+        "run_at": "document_start",
+        "all_frames": true
       }
     ],
     "web_accessible_resources": [
