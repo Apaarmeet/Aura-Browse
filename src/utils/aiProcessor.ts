@@ -1,13 +1,28 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { VoiceCommand } from "../types/index";
 
-const API_KEY = "AIzaSyDi04sCzDKBMyEUAYzlJ3lQwIQ3fRBkWyo"; // Replace with your actual API key
-const genAI = new GoogleGenerativeAI(API_KEY);
+async function getApiKey(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.get(["geminiApiKey"], (result) => {
+      if (result.geminiApiKey) {
+        resolve(result.geminiApiKey);
+      } else {
+        reject(
+          new Error(
+            "No API key found. Please add your Gemini API key in the settings."
+          )
+        );
+      }
+    });
+  });
+}
 
 export async function processVoiceCommand(
   transcript: string
 ): Promise<VoiceCommand> {
   try {
+    const apiKey = await getApiKey();
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
@@ -64,6 +79,17 @@ export async function processVoiceCommand(
     throw new Error("Invalid response format");
   } catch (error) {
     console.error("AI processing error:", error);
+
+    // Provide specific message for missing API key
+    if (error instanceof Error && error.message.includes("No API key found")) {
+      return {
+        action: "none",
+        parameters: {},
+        response:
+          "Please add your Gemini API key in the settings (click the gear icon).",
+      };
+    }
+
     return {
       action: "none",
       parameters: {},

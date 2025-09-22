@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Loader } from "lucide-react";
+import ApiKeySettings from './ApiKeySettings';
 import { processVoiceCommand } from "../utils/aiProcessor";
 import { VoiceCommand, RecordingState } from "../types/index";
 // import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "dom-speech-recognition"
@@ -204,12 +205,11 @@ const VoiceAssistant: React.FC = () => {
     }
   };
 
-  return (
-    <div className="w-80 min-h-96 p-5 bg-white rounded-lg shadow-lg">
+      return (
+    <div className="w-80 min-h-96 p-5 bg-white rounded-lg shadow-lg relative">
+      <ApiKeySettings />
       <div className="text-center mb-5">
-        <h2 className="text-xl font-semibold text-gray-800 m-0">
-          Voice Assistant
-        </h2>
+        <h2 className="text-xl font-semibold text-gray-800 m-0">Voice Assistant</h2>
       </div>
 
       <div className="flex justify-center my-5">
