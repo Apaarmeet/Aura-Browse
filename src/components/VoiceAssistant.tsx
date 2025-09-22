@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Loader } from "lucide-react";
-import ApiKeySettings from './ApiKeySettings';
+import ApiKeySettings from "./ApiKeySettings";
 import { processVoiceCommand } from "../utils/aiProcessor";
 import { VoiceCommand, RecordingState } from "../types/index";
 // import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "dom-speech-recognition"
@@ -143,9 +143,10 @@ const VoiceAssistant: React.FC = () => {
             async (response) => {
               const injectAndExecute = async () => {
                 console.log("Injecting content script...");
-                await chrome.scripting.executeScript({
-                  target: { tabId: tabs[0].id! },
-                  files: ["assets/content-script.ts-NchQzKUU.js"],
+                // Ask background script to inject content script
+                chrome.runtime.sendMessage({
+                  action: "injectContentScript",
+                  tabId: tabs[0].id,
                 });
 
                 // Wait a bit for the content script to initialize
@@ -205,11 +206,13 @@ const VoiceAssistant: React.FC = () => {
     }
   };
 
-      return (
+  return (
     <div className="w-80 min-h-96 p-5 bg-white rounded-lg shadow-lg relative">
       <ApiKeySettings />
       <div className="text-center mb-5">
-        <h2 className="text-xl font-semibold text-gray-800 m-0">Voice Assistant</h2>
+        <h2 className="text-xl font-semibold text-gray-800 m-0">
+          Voice Assistant
+        </h2>
       </div>
 
       <div className="flex justify-center my-5">

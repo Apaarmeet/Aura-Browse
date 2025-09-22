@@ -1,19 +1,57 @@
-chrome.runtime.onInstalled.addListener(() => {
+// Function to get the content script path
+async function getContentScriptPath(): Promise<string> {
+  return new Promise((resolve) => {
+    // Use chrome.runtime.getPackageDirectoryEntry which is available in MV3
+    chrome.runtime.getPackageDirectoryEntry((root) => {
+      root.getDirectory("assets", {}, (assetsDir) => {
+        assetsDir.createReader().readEntries((entries) => {
+          const contentScript = entries.find(
+            (entry) =>
+              entry.name.startsWith("content-script.ts-") &&
+              entry.name.endsWith(".js")
+          );
+          if (contentScript) {
+            resolve(`assets/${contentScript.name}`);
+          } else {
+            console.error("Could not find content script in assets directory");
+            resolve(""); // Return empty string if not found
+          }
+        });
+      });
+    });
+  });
+}
+
+// Keep track of the content script path
+let contentScriptPath: string | null = null;
+
+chrome.runtime.onInstalled.addListener(async () => {
   console.log("✅ Voice Assistant Extension installed");
+  // Get the content script path when the extension is installed
+  contentScriptPath = await getContentScriptPath();
+  console.log("Content script path:", contentScriptPath);
 });
 
 // Listen for tab updates to inject content script into new tabs
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (
     changeInfo.status === "complete" &&
     tab.url?.startsWith("chrome://newtab")
   ) {
-    chrome.scripting
-      .executeScript({
-        target: { tabId },
-        files: ["assets/content-script.ts-hYyCZ8gQ.js"],
-      })
-      .catch((err) => console.error("Failed to inject content script:", err));
+    if (!contentScriptPath) {
+      contentScriptPath = await getContentScriptPath();
+    }
+
+    if (contentScriptPath) {
+      chrome.scripting
+        .executeScript({
+          target: { tabId },
+          files: [contentScriptPath],
+        })
+        .catch((err) => console.error("Failed to inject content script:", err));
+    } else {
+      console.error("No content script path available");
+    }
   }
 });
 
@@ -32,6 +70,29 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: any) => void
   ) => {
     console.log("📩 Background got message:", request);
+
+    // Handle content script injection request
+    if (request.action === "injectContentScript" && request.tabId) {
+      (async () => {
+        if (!contentScriptPath) {
+          contentScriptPath = await getContentScriptPath();
+        }
+
+        if (contentScriptPath) {
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: request.tabId },
+              files: [contentScriptPath],
+            });
+            sendResponse({ success: true });
+          } catch (err) {
+            console.error("Failed to inject content script:", err);
+            sendResponse({ success: false, error:err });
+          }
+        }
+      })();
+      return true;
+    }
 
     // Handle direct navigation requests
     if (request.action === "navigateTab") {
@@ -73,26 +134,36 @@ chrome.runtime.onMessage.addListener(
           chrome.tabs.onUpdated.removeListener(listener);
 
           // Inject content script
-          chrome.scripting
-            .executeScript({
-              target: { tabId: updatedTabId },
-              files: ["assets/content-script.ts-hYyCZ8gQ.js"],
-            })
-            .then(() => {
-              // Send the command after ensuring content script is loaded
-              if (nextCommand) {
-                setTimeout(() => {
-                  chrome.tabs.sendMessage(updatedTabId, nextCommand, () => {
-                    if (chrome.runtime.lastError) {
-                      console.error(
-                        "Error sending message:",
-                        chrome.runtime.lastError
-                      );
-                    }
-                  });
-                }, 500); // Small delay to ensure content script is initialized
+          (async () => {
+            if (!contentScriptPath) {
+              contentScriptPath = await getContentScriptPath();
+            }
+
+            if (contentScriptPath) {
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: updatedTabId },
+                  files: [contentScriptPath],
+                });
+
+                // Send the command after ensuring content script is loaded
+                if (nextCommand) {
+                  setTimeout(() => {
+                    chrome.tabs.sendMessage(updatedTabId, nextCommand, () => {
+                      if (chrome.runtime.lastError) {
+                        console.error(
+                          "Error sending message:",
+                          chrome.runtime.lastError
+                        );
+                      }
+                    });
+                  }, 500); // Small delay to ensure content script is initialized
+                }
+              } catch (err) {
+                console.error("Failed to inject content script:", err);
               }
-            });
+            }
+          })();
         }
       });
 
@@ -113,18 +184,27 @@ chrome.runtime.onMessage.addListener(
           console.log("✅ Navigation complete, injecting content script");
 
           // Re-inject content script
-          chrome.scripting.executeScript(
-            {
-              target: { tabId },
-              files: ["assets/content-script.ts-hYyCZ8gQ.js"], // your built content script
-            },
-            () => {
-              console.log("📩 Sending queued command:", nextCommand);
-
-              // Send the next command
-              chrome.tabs.sendMessage(tabId, nextCommand);
+          (async () => {
+            if (!contentScriptPath) {
+              contentScriptPath = await getContentScriptPath();
             }
-          );
+
+            if (contentScriptPath) {
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId },
+                  files: [contentScriptPath],
+                });
+
+                console.log("📩 Sending queued command:", nextCommand);
+
+                // Send the next command
+                chrome.tabs.sendMessage(tabId, nextCommand);
+              } catch (err) {
+                console.error("Failed to inject content script:", err);
+              }
+            }
+          })();
 
           // Remove this listener after it fires once
           chrome.webNavigation.onCompleted.removeListener(listener);
