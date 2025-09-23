@@ -22,8 +22,9 @@ async function getContentScriptPath(): Promise<string> {
   });
 }
 
-// Keep track of the content script path
+// Keep track of the content script path and pending actions
 let contentScriptPath: string | null = null;
+let pendingActions: Map<number, { action: string; query?: string }> = new Map();
 
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("✅ Voice Assistant Extension installed");
@@ -87,7 +88,7 @@ chrome.runtime.onMessage.addListener(
             sendResponse({ success: true });
           } catch (err) {
             console.error("Failed to inject content script:", err);
-            sendResponse({ success: false, error:err });
+            sendResponse({ success: false, error: err });
           }
         }
       })();
@@ -115,9 +116,75 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    // Handle history navigation (back/forward)
+    if (request.action === "navigateHistory") {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        console.error("No tab ID available for history navigation");
+        sendResponse({ success: false });
+        return true;
+      }
+
+      console.log(`🕒 Navigating ${request.direction} in tab ${tabId}`);
+      if (request.direction === "back") {
+        chrome.tabs.goBack(tabId, () => {
+          if (chrome.runtime.lastError) {
+            console.error("Navigation back failed:", chrome.runtime.lastError);
+            sendResponse({ success: false });
+          } else {
+            sendResponse({ success: true });
+          }
+        });
+      } else if (request.direction === "forward") {
+        chrome.tabs.goForward(tabId, () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Navigation forward failed:",
+              chrome.runtime.lastError
+            );
+            sendResponse({ success: false });
+          } else {
+            sendResponse({ success: true });
+          }
+        });
+      }
+      return true;
+    }
+
     // Case 1: Background-task (your existing code)
     if (request.action === "background-task") {
       console.log("Background task:", request);
+    }
+
+    // Handle YouTube search and navigation
+    if (request.action === "youtubeSearch") {
+      const tabId = sender.tab?.id;
+      if (!tabId) return true;
+
+      // Store the search action for after navigation completes
+      pendingActions.set(tabId, {
+        action: "search",
+        query: request.query,
+      });
+
+      return true;
+    }
+
+    // Handle navigation and search
+    if (request.action === "navigateAndSearch") {
+      const tabId = sender.tab?.id;
+      if (!tabId) return true;
+
+      // Store the next action
+      pendingActions.set(tabId, {
+        action: request.nextAction,
+        query: request.query,
+      });
+
+      // Navigate to the URL
+      chrome.tabs.update(tabId, { url: request.url });
+
+      return true;
     }
 
     // Case 2: Handle "navigateAndThen"
@@ -126,47 +193,51 @@ chrome.runtime.onMessage.addListener(
       const tabId = sender.tab?.id;
 
       // Ensure content script is injected after navigation
-      chrome.tabs.onUpdated.addListener(function listener(
-        updatedTabId,
-        changeInfo
-      ) {
-        if (updatedTabId === tabId && changeInfo.status === "complete") {
-          chrome.tabs.onUpdated.removeListener(listener);
-
-          // Inject content script
-          (async () => {
-            if (!contentScriptPath) {
-              contentScriptPath = await getContentScriptPath();
-            }
-
-            if (contentScriptPath) {
+      const navigationListener = (
+        tabId: number,
+        changeInfo: { status?: string },
+        tab: chrome.tabs.Tab
+      ) => {
+        if (
+          changeInfo.status === "complete" &&
+          tab.url?.includes("youtube.com")
+        ) {
+          // Get any pending actions for this tab
+          const pendingAction = pendingActions.get(tabId);
+          if (pendingAction) {
+            setTimeout(async () => {
               try {
                 await chrome.scripting.executeScript({
-                  target: { tabId: updatedTabId },
-                  files: [contentScriptPath],
+                  target: { tabId },
+                  func: (query) => {
+                    const searchInput =
+                      document.querySelector<HTMLInputElement>("input#search");
+                    if (searchInput) {
+                      searchInput.value = query;
+                      searchInput.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                      );
+
+                      const searchButton = document.querySelector<HTMLElement>(
+                        "button#search-icon-legacy"
+                      );
+                      if (searchButton) searchButton.click();
+                    }
+                  },
+                  args: [pendingAction.query || ""],
                 });
-
-                // Send the command after ensuring content script is loaded
-                if (nextCommand) {
-                  setTimeout(() => {
-                    chrome.tabs.sendMessage(updatedTabId, nextCommand, () => {
-                      if (chrome.runtime.lastError) {
-                        console.error(
-                          "Error sending message:",
-                          chrome.runtime.lastError
-                        );
-                      }
-                    });
-                  }, 500); // Small delay to ensure content script is initialized
-                }
+                pendingActions.delete(tabId);
               } catch (err) {
-                console.error("Failed to inject content script:", err);
+                console.error("Failed to execute search script:", err);
               }
-            }
-          })();
-        }
-      });
+            }, 1000); // Wait for YouTube to initialize
+          }
 
+          chrome.tabs.onUpdated.removeListener(navigationListener);
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(navigationListener);
       if (!tabId) {
         console.warn("⚠️ No tab ID available for navigation");
         sendResponse({ success: false });

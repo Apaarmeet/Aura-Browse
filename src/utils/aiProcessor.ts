@@ -31,11 +31,21 @@ export async function processVoiceCommand(
     Available actions:
     - navigate: Go to a specific URL
     - search: Search on current page or search engine
-    - click: Click an element
+    - click: Click an element with support for numbered items (e.g., "click the 3rd link" or "click the second video")
     - scroll: Scroll the page
     - type: Type text into an input field
-    - play_youtube: Open YouTube and search for content
-    - google_search: Search on Google (use this when user explicitly mentions Google)
+    - play_youtube: Search and play content on YouTube
+    - google_search: Search on Google
+    
+    Special handling:
+    YouTube commands:
+    - If command contains "open youtube and play X" or "play X on youtube" → use "play_youtube" action
+    - If command is just "play X" while already on YouTube → use "play_youtube" action
+    - If command is just "open youtube" → use "navigate" action with youtube.com URL
+
+    Numbered selections:
+    - For "click the Nth video/link" → use "click" action with index=N
+    - Convert ordinal numbers to cardinal (e.g., "third" → 3, "first" → 1)
 
     User command: "${transcript}"
 
@@ -54,13 +64,17 @@ export async function processVoiceCommand(
 
     Examples:
     - "open youtube and play karan aujla" → {"action": "play_youtube", "parameters": {"query": "karan aujla"}, "response": "Opening YouTube and searching for Karan Aujla"}
+    - "click the third video" → {"action": "click", "parameters": {"index": 3}, "response": "Clicking the third video"}
+    - "click the 2nd link" → {"action": "click", "parameters": {"index": 2}, "response": "Clicking the second link"}
+    - "play mrwhosetheboss" → {"action": "play_youtube", "parameters": {"query": "mrwhosetheboss"}, "response": "Searching for MrWhoseTheBoss on YouTube"}
+    - "open youtube" → {"action": "navigate", "parameters": {"url": "https://youtube.com"}, "response": "Opening YouTube"}
     - "scroll down" → {"action": "scroll", "parameters": {"direction": "down"}, "response": "Scrolling down the page"}
-    - "search about trump on google" → {"action": "google_search", "parameters": {"query": "trump"}, "response": "Searching Google for Trump"}
     - "google who is elon musk" → {"action": "google_search", "parameters": {"query": "who is elon musk"}, "response": "Searching Google for information about Elon Musk"}
 
     IMPORTANT:
-    - Return ONLY raw JSON (no markdown, no code block, no extra text).
-    - If user says "open youtube", treat it as {"action":"navigate","parameters":{"url":"https://youtube.com"}}
+    - Return ONLY raw JSON (no markdown, no code block, no extra text)
+    - For YouTube commands, check if it's "open and play", "play on youtube", or just "play" when already on YouTube
+    - Always include a friendly, descriptive response
     
     `;
 
@@ -97,4 +111,3 @@ export async function processVoiceCommand(
     };
   }
 }
-

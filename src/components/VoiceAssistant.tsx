@@ -3,17 +3,66 @@ import { Mic, MicOff, Loader } from "lucide-react";
 import ApiKeySettings from "./ApiKeySettings";
 import { processVoiceCommand } from "../utils/aiProcessor";
 import { VoiceCommand, RecordingState } from "../types/index";
-// import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "dom-speech-recognition"
+
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  [index: number]: {
+    transcript: string;
+  };
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+type SpeechRecognitionErrorEvent = {
+  error: string;
+};
 
 const VoiceAssistant: React.FC = () => {
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [transcript, setTranscript] = useState<string>("");
   const [response, setResponse] = useState<string>("");
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // Define the type for SpeechRecognition
+  type SpeechRecognitionType =
+    | typeof window.SpeechRecognition
+    | typeof window.webkitSpeechRecognition;
+  const recognitionRef = useRef<InstanceType<SpeechRecognitionType> | null>(
+    null
+  );
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // Initialize speech recognition
+    // Initialize recognition when component mounts
+    initializeRecognition();
+
+    // Cleanup function
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const initializeRecognition = (): void => {
     if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
       const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -51,12 +100,13 @@ const VoiceAssistant: React.FC = () => {
             stopRecording();
             processCommand(finalTranscript);
           }
-        }, 2500); // 2.5 seconds of silence
+        }, 2500);
       };
 
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error("Speech recognition error:", event.error);
         setRecordingState("idle");
+        recognitionRef.current = null; // Reset on error
       };
 
       recognitionRef.current.onend = () => {
@@ -64,30 +114,38 @@ const VoiceAssistant: React.FC = () => {
         if (silenceTimerRef.current) {
           clearTimeout(silenceTimerRef.current);
         }
+        recognitionRef.current = null; // Reset when recognition ends
       };
     }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-    };
-  }, []);
+  };
 
   const startRecording = (): void => {
-    if (recognitionRef.current && recordingState === "idle") {
-      setTranscript("");
-      setResponse("");
-      recognitionRef.current.start();
+    if (recordingState === "idle") {
+      // Re-initialize recognition if needed
+      if (!recognitionRef.current) {
+        initializeRecognition();
+      }
+
+      if (recognitionRef.current) {
+        setTranscript("");
+        setResponse("");
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.error("Failed to start recording:", error);
+          // If start fails, reset and try one more time
+          recognitionRef.current = null;
+          initializeRecognition();
+          recognitionRef.current?.start();
+        }
+      }
     }
   };
 
   const stopRecording = (): void => {
     if (recognitionRef.current && recordingState === "recording") {
       recognitionRef.current.stop();
+      recognitionRef.current = null; // Reset after stopping
     }
   };
 
